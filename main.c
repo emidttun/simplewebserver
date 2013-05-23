@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
-
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
 
-const char Message[] = "Hello and welcome to my webserver!";
+#define BUFFERSIZE 1024
 
 int main(void)
 {
@@ -50,7 +50,14 @@ int main(void)
     for (;;) {
         struct sockaddr_in clientName = {0};
         int connectionSocket = 0;
-        int clientNameLength = sizeof(clientName);
+        int clientNameLength = 0;
+        int file = 0;
+        int readCnt = 0;
+        int writeCnt = 0;
+        char* pBuffer;
+        char buffer[BUFFERSIZE];
+
+        clientNameLength = sizeof(clientName);
 
         connectionSocket = accept(
                     listenSocket,
@@ -65,7 +72,40 @@ int main(void)
             fprintf(stderr, "Connection established.\n");
         }
 
-        write(connectionSocket, Message, sizeof(Message));
+        readCnt = read(connectionSocket, buffer, BUFFERSIZE);
+
+        if (0 < readCnt) {
+            fprintf(stderr, "Received: %s", buffer);
+        }
+
+        file = open("testdata.txt", O_RDONLY);
+
+        if (-1 == file) {
+            fprintf(stderr, "Could not open the file.\n");
+            close(connectionSocket);
+            continue;
+        }
+
+        readCnt = 0;
+
+        while (0 < (readCnt = read(file, buffer, BUFFERSIZE))) {
+            writeCnt = 0;
+            pBuffer = buffer;
+
+            while (writeCnt < readCnt) {
+                readCnt -= writeCnt;
+                pBuffer += writeCnt;
+                writeCnt = write(connectionSocket, pBuffer, readCnt);
+
+                if (-1 == writeCnt) {
+                    fprintf(stderr, "Could not write to the client.\n");
+                    close(connectionSocket);
+                    continue;
+                }
+            }
+        }
+
+        close(file);
         close(connectionSocket);
 
         fprintf(stderr, "Connection closed.\n");
