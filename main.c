@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
+#include <string.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -8,6 +9,9 @@
 #include <signal.h>
 
 #define BUFFERSIZE 1024
+
+const char notImplemented[] = "HTTP/1.1 501 Not Implemented\r\n";
+const char ok[] = "HTTP/1.1 200 OK\r\n\r\n";
 
 void sigChildHandler(int sig)
 {
@@ -99,36 +103,41 @@ int main(void)
 
             if (0 < readCnt) {
                 fprintf(stderr, "Received: %s", buffer);
-            }
 
-            file = open("testdata.txt", O_RDONLY);
+                if (0 != strstr(buffer, "GET")) {
+                    file = open("testdata.txt", O_RDONLY);
 
-            if (-1 == file) {
-                fprintf(stderr, "Could not open the file.\n");
-                close(connectionSocket);
-                continue;
-            }
-
-            readCnt = 0;
-
-            while (0 < (readCnt = read(file, buffer, BUFFERSIZE))) {
-                writeCnt = 0;
-                pBuffer = buffer;
-
-                while (writeCnt < readCnt) {
-                    readCnt -= writeCnt;
-                    pBuffer += writeCnt;
-                    writeCnt = write(connectionSocket, pBuffer, readCnt);
-
-                    if (-1 == writeCnt) {
-                        fprintf(stderr, "Could not write to the client.\n");
+                    if (-1 == file) {
+                        fprintf(stderr, "Could not open the file.\n");
                         close(connectionSocket);
                         continue;
                     }
+
+                    write (connectionSocket, ok, sizeof(ok) - 1);
+
+                    while (0 < (readCnt = read(file, buffer, BUFFERSIZE))) {
+                        writeCnt = 0;
+                        pBuffer = buffer;
+
+                        while (writeCnt < readCnt) {
+                            readCnt -= writeCnt;
+                            pBuffer += writeCnt;
+                            writeCnt = write(connectionSocket, pBuffer, readCnt);
+
+                            if (-1 == writeCnt) {
+                                fprintf(stderr, "Could not write to the client.\n");
+                                close(connectionSocket);
+                                continue;
+                            }
+                        }
+                    }
+
+
+                    close(file);
+                } else {
+                    write(connectionSocket, notImplemented, sizeof(notImplemented) - 1);
                 }
             }
-
-            close(file);
             close(connectionSocket);
             fprintf(stderr, "Connection closed.\n");
             exit(0);
