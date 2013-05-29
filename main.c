@@ -13,11 +13,13 @@
 const char notImplemented[] = "HTTP/1.1 501 Not Implemented\r\n";
 const char ok[] = "HTTP/1.1 200 OK\r\n\r\n";
 
+
+int transferToSocket(int outSock);
+
 void sigChildHandler(int sig)
 {
     while (0 < waitpid(-1, NULL, WNOHANG));
 }
-
 
 int main(void)
 {
@@ -25,6 +27,7 @@ int main(void)
     int retVal = 0;
     int optVal = 0;
     struct sockaddr_in server;
+    char requestBuffer[BUFFERSIZE];
 
     listenSocket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -74,11 +77,6 @@ int main(void)
         int connectionSocket = 0;
         int clientNameLength = 0;
         int pid = 0;
-        int file = 0;
-        int readCnt = 0;
-        int writeCnt = 0;
-        char* pBuffer;
-        char buffer[BUFFERSIZE];
 
         clientNameLength = sizeof(clientName);
 
@@ -88,6 +86,8 @@ int main(void)
                     &clientNameLength);
 
         if (0 == (pid = fork())) {
+            int readCnt = 0;
+
             fprintf(stderr, "Child process %i created.\n", getpid());
             close(listenSocket);
 
@@ -99,41 +99,18 @@ int main(void)
                 fprintf(stderr, "Connection established.\n");
             }
 
-            readCnt = read(connectionSocket, buffer, BUFFERSIZE);
+            readCnt = read(connectionSocket, requestBuffer, BUFFERSIZE);
 
             if (0 < readCnt) {
-                fprintf(stderr, "Received: %s", buffer);
+                fprintf(stderr, "Received: %s", requestBuffer);
 
-                if (0 != strstr(buffer, "GET")) {
-                    file = open("testdata.txt", O_RDONLY);
+                if (0 != strstr(requestBuffer, "GET")) {
 
-                    if (-1 == file) {
-                        fprintf(stderr, "Could not open the file.\n");
+
+                    if (0 != transferToSocket(connectionSocket)) {
                         close(connectionSocket);
                         continue;
                     }
-
-                    write (connectionSocket, ok, sizeof(ok) - 1);
-
-                    while (0 < (readCnt = read(file, buffer, BUFFERSIZE))) {
-                        writeCnt = 0;
-                        pBuffer = buffer;
-
-                        while (writeCnt < readCnt) {
-                            readCnt -= writeCnt;
-                            pBuffer += writeCnt;
-                            writeCnt = write(connectionSocket, pBuffer, readCnt);
-
-                            if (-1 == writeCnt) {
-                                fprintf(stderr, "Could not write to the client.\n");
-                                close(connectionSocket);
-                                continue;
-                            }
-                        }
-                    }
-
-
-                    close(file);
                 } else {
                     write(connectionSocket, notImplemented, sizeof(notImplemented) - 1);
                 }
@@ -150,4 +127,45 @@ int main(void)
     printf("Goodbye!\n");
     return 0;
 }
+
+
+int transferToSocket(int outSock)
+{
+    int file = 0;
+    int readCnt = 0;
+    int writeCnt = 0;
+    char* pBuffer;
+    char buffer[BUFFERSIZE];
+
+    file = open("testdata.txt", O_RDONLY);
+
+    if (-1 == file) {
+        fprintf(stderr, "Could not open the file.\n");
+        return -1;
+    }
+
+    write(outSock, ok, sizeof(ok) - 1);
+
+    while (0 < (readCnt = read(file, buffer, BUFFERSIZE))) {
+        writeCnt = 0;
+        pBuffer = buffer;
+
+        while (writeCnt < readCnt) {
+            readCnt -= writeCnt;
+            pBuffer += writeCnt;
+            writeCnt = write(outSock, pBuffer, readCnt);
+
+            if (-1 == writeCnt) {
+                fprintf(stderr, "Could not write to the client.\n");
+                close(file);
+                return -1;
+            }
+        }
+    }
+
+    close(file);
+    return 0;
+}
+
+
 
