@@ -7,14 +7,16 @@
 #include <netinet/in.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <unistd.h>
 
 #define BUFFERSIZE 1024
 
-const char notImplemented[] = "HTTP/1.1 501 Not Implemented\r\n";
-const char ok[] = "HTTP/1.1 200 OK\r\n\r\n";
+const char responseOk[] =             "HTTP/1.1 200 OK\r\n\r\n";
+const char responseNotFound[] =       "HTTP/1.1 404 Not Found\r\n\r\n";
+const char responseNotImplemented[] = "HTTP/1.1 501 Not Implemented\r\n\r\n";
 
 
-int transferToSocket(int outSock);
+int transferToSocket(int outSock, char *fileName);
 
 void sigChildHandler(int sig)
 {
@@ -105,31 +107,57 @@ int main(void)
                 fprintf(stderr, "Received: %s", requestBuffer);
 
                 if (0 != strstr(requestBuffer, "GET")) {
+                    char fileName[256];
+                    char *strFileStart;
+                    char *strFileStop;
 
+                    int fileAccess = 0;
 
-                    if (0 != transferToSocket(connectionSocket)) {
-                        close(connectionSocket);
-                        continue;
+                    /* Getting the filename for the GET request:
+                     * "GET /<filename> HTTP/1.1CRFL"
+                     * Searching for first '/' and consequtive space
+                     */
+                    strFileStart = strchr(requestBuffer, '/');
+                    strFileStop = strchr(strFileStart, ' ');
+                    strncpy(fileName, strFileStart + 1, strFileStop - strFileStart - 1);
+                    fileName[strFileStop - strFileStart - 1] = '\0';
+
+                    /* using "index.html" as filename if none is given */
+                    if (0 == strcmp("", fileName)) {
+                        strcpy(fileName, "index.html");
+                    }
+
+                    fileAccess = access(fileName, R_OK);
+
+                    fprintf(stderr, "\nAccess of file %s returned %d.", fileName, fileAccess);
+
+                    if (0 == fileAccess) {
+                        if (0 != transferToSocket(connectionSocket, fileName)) {
+                            close(connectionSocket);
+                            continue;
+                        }
+                    } else {
+                        write(connectionSocket, responseNotFound, sizeof(responseNotImplemented) - 1);
                     }
                 } else {
-                    write(connectionSocket, notImplemented, sizeof(notImplemented) - 1);
+                    write(connectionSocket, responseNotImplemented, sizeof(responseNotImplemented) - 1);
                 }
             }
             close(connectionSocket);
             fprintf(stderr, "Connection closed.\n");
             exit(0);
         }
+
+        /* Code running in parent process */
         close(connectionSocket);
     }
 
-
     close(listenSocket);
-    printf("Goodbye!\n");
     return 0;
 }
 
 
-int transferToSocket(int outSock)
+int transferToSocket(int outSock, char *fileName)
 {
     int file = 0;
     int readCnt = 0;
@@ -137,14 +165,14 @@ int transferToSocket(int outSock)
     char* pBuffer;
     char buffer[BUFFERSIZE];
 
-    file = open("testdata.txt", O_RDONLY);
+    file = open(fileName, O_RDONLY);
 
     if (-1 == file) {
         fprintf(stderr, "Could not open the file.\n");
         return -1;
     }
 
-    write(outSock, ok, sizeof(ok) - 1);
+    write(outSock, responseOk, sizeof(responseOk) - 1);
 
     while (0 < (readCnt = read(file, buffer, BUFFERSIZE))) {
         writeCnt = 0;
