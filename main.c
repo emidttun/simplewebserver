@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(8081);
+    server.sin_port = htons(80);
 
     retVal = bind(listenSocket, (struct sockaddr*) &server, sizeof(server));
 

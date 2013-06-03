@@ -1,4 +1,8 @@
 simplewebserver
 ===============
 
-Repeating some network porgramming for *NIX
+Repeating some network programming for *NIX.
+
+Compiles on Linux and Mac OS X.
+
+Usage: simplewebserver <path/to/initialdirectory>
