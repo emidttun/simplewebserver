@@ -23,7 +23,7 @@ void sigChildHandler(int sig)
     while (0 < waitpid(-1, NULL, WNOHANG));
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
     int listenSocket = 0;
     int retVal = 0;
@@ -73,6 +73,10 @@ int main(void)
     }
 
     signal(SIGCHLD, sigChildHandler);
+
+    if (1 < argc && 0 == chdir(argv[1])) {
+        fprintf(stderr, "\nSetting working directory to %s", argv[1]);
+    }
 
     for (;;) {
         struct sockaddr_in clientName = {0};
